@@ -1,0 +1,54 @@
+{
+  "name": "ndls",
+  "version": "1.0.0",
+  "description": "Serveur personnel de photos et vidéos auto-hébergé avec anti-doublon",
+  "main": "server.js",
+  "author": "Andrea Belvedere",
+  "license": "ISC",
+  "private": true,
+
+  "scripts": {
+    "start": "NODE_ENV=production node server.js",
+    "dev": "NODE_ENV=development nodemon server.js",
+    "pm2": "pm2 start server.js --name ndls",
+    "stop": "pm2 stop ndls",
+    "logs": "pm2 logs ndls",
+    "init-db": "node -e \"require('./addon/database').initializeDatabase()\""
+  },
+
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.19.2",
+    "fs-extra": "^11.1.1",
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.33.3",
+    "sqlite3": "^5.1.6",
+    "fluent-ffmpeg": "^2.1.2",
+    "ffmpeg-static": "^5.1.0",
+    "ffprobe-static": "^3.0.0",
+    "check-disk-space": "^3.4.0"
+  },
+
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/votre-utilisateur/ndls-gallery.git"
+  },
+  
+  "keywords": [
+    "gallery",
+    "photo",
+    "video",
+    "self-hosted",
+    "sqlite",
+    "express"
+  ]
+}
