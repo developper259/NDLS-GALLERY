@@ -27,11 +27,6 @@ app.use("/thumbs", express.static(config.paths.thumbs));
 const apiRoutes = require("./routes/api");
 app.use("/api", apiRoutes);
 
-// Route pour toutes les autres requêtes - renvoie l'application frontend
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../Client/index.php"));
-});
-
 // Gestion des erreurs globales
 app.use((err, req, res, next) => {
   console.error("Erreur non gérée:", err);
