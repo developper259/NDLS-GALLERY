@@ -27,6 +27,12 @@ app.use("/thumbs", express.static(config.paths.thumbs));
 const apiRoutes = require("./routes/api");
 app.use("/api", apiRoutes);
 
+
+// Routes API
+app.use("/health", (req, res) => {
+  res.status(200).json({ message: "OK" });
+});
+
 // Gestion des erreurs globales
 app.use((err, req, res, next) => {
   console.error("Erreur non gérée:", err);

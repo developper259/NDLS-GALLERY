@@ -141,10 +141,5 @@ router.post("/albums/:albumId/media", albumController.addMediaToAlbum);
  */
 router.delete("/albums/:albumId/media", albumController.removeMediaFromAlbum);
 
-// Healthcheck
-router.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
-
 // Exporter le routeur
 module.exports = router;
