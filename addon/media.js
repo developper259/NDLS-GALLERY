@@ -11,8 +11,8 @@ class Media {
       // Insérer les informations dans la base de données
       const result = await db.run(
         `INSERT INTO media 
-                (original_name, file_name, file_path, file_type, file_size, hash, album_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+                (original_name, file_name, file_path, file_type, file_size, hash, album_id, creation_date, upload_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
         [
           file.originalName,
           file.fileName,
@@ -21,6 +21,7 @@ class Media {
           file.size,
           file.hash,
           albumId,
+          file.creation_date,
         ]
       );
 
@@ -187,8 +188,8 @@ class Media {
   static async getAll(includeTrashed = false) {
     try {
       const query = includeTrashed
-        ? "SELECT * FROM media ORDER BY created_at DESC"
-        : "SELECT * FROM media WHERE is_trashed = 0 ORDER BY created_at DESC";
+        ? "SELECT * FROM media ORDER BY creation_date DESC"
+        : "SELECT * FROM media WHERE is_trashed = 0 ORDER BY creation_date DESC";
 
       return await db.all(query);
     } catch (error) {

@@ -27,7 +27,6 @@ app.use("/thumbs", express.static(config.paths.thumbs));
 const apiRoutes = require("./routes/api");
 app.use("/api", apiRoutes);
 
-
 // Routes API
 app.use("/health", (req, res) => {
   res.status(200).json({ message: "OK" });

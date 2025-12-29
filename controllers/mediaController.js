@@ -1,3 +1,4 @@
+const exifParser = require("exif-parser");
 const Media = require("../addon/media");
 const Album = require("../addon/album");
 const fs = require("fs-extra");
@@ -57,7 +58,8 @@ const getAllMedia = async (req, res) => {
       height: item.height,
       dimension: await getDimension(item.file_path, item.file_type),
       duration: item.duration,
-      createdAt: item.created_at,
+      creation_date: item.creation_date,
+      upload_date: item.upload_date,
     }));
 
     // 2. On attend que toutes les promesses du tableau soient terminées
@@ -244,12 +246,26 @@ const uploadMedia = async (req, res) => {
         // Obtenir les dimensions et la durée
         let width = 0,
           height = 0,
-          duration = 0;
+          duration = 0,
+          creation_date = null;
 
         if (isImage(file.mimetype)) {
           const dimensions = await getImageDimensions(destPath);
           width = dimensions.width;
           height = dimensions.height;
+
+          try {
+            const buffer = await fs.readFile(destPath);
+            const parser = exifParser.create(buffer);
+            const result = parser.parse();
+            if (result.tags.CreateDate) {
+              creation_date = new Date(result.tags.CreateDate * 1000);
+            } else if (result.tags.DateTimeOriginal) {
+              creation_date = new Date(result.tags.DateTimeOriginal * 1000);
+            }
+          } catch (exifError) {
+            console.error("Could not parse EXIF data:", exifError);
+          }
         } else if (isVideo(file.mimetype)) {
           const videoInfo = await getVideoDimensions(destPath);
           width = videoInfo.width;
@@ -258,6 +274,10 @@ const uploadMedia = async (req, res) => {
         }
 
         // Créer la miniature
+        if (!creation_date) {
+          creation_date = new Date();
+        }
+
         const thumbPath = await createThumbnail(destPath, file.mimetype);
 
         // Créer une entrée média dans la base de données
@@ -272,6 +292,7 @@ const uploadMedia = async (req, res) => {
           width: width,
           height: height,
           duration: duration,
+          creation_date: creation_date,
         };
 
         // Ici, vous pouvez ajouter la logique pour générer une miniature
@@ -290,6 +311,7 @@ const uploadMedia = async (req, res) => {
           width: media.width,
           height: media.height,
           duration: media.duration || 0,
+          creation_date: media.creation_date,
         });
       } catch (error) {
         console.error("Erreur lors du traitement du fichier:", error);
