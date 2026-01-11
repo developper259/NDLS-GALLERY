@@ -11,8 +11,8 @@ class Media {
       // Insérer les informations dans la base de données
       const result = await db.run(
         `INSERT INTO media 
-                (original_name, file_name, file_path, file_type, file_size, hash, album_id, creation_date, upload_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+                (original_name, file_name, file_path, file_type, file_size, hash, album_id, creation_date, upload_date, dimension)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           file.originalName,
           file.fileName,
@@ -22,6 +22,8 @@ class Media {
           file.hash,
           albumId,
           file.creation_date,
+          file.upload_date,
+          file.dimension,
         ]
       );
 
@@ -37,6 +39,19 @@ class Media {
       if (file && file.path) {
         await fs.remove(file.path).catch(console.error);
       }
+      throw error;
+    }
+  }
+
+  // Vérifier rapidement si un média existe déjà (nom original + taille)
+  static async getByOriginalNameAndSize(originalName, fileSize) {
+    try {
+      return await db.get(
+        "SELECT id FROM media WHERE original_name = ? AND file_size = ?",
+        [originalName, fileSize]
+      );
+    } catch (error) {
+      console.error("Erreur lors de la vérification du média:", error);
       throw error;
     }
   }
@@ -157,7 +172,7 @@ class Media {
   static async getTrashed() {
     try {
       return await db.all(
-        "SELECT * FROM media WHERE is_trashed = 1 ORDER BY trashed_at DESC"
+        "SELECT id, original_name, file_name, file_path, file_type, file_size, hash, dimension, album_id, is_trashed, trashed_at, creation_date, upload_date, updated_at FROM media WHERE is_trashed = 1 ORDER BY trashed_at DESC"
       );
     } catch (error) {
       console.error("Erreur lors de la récupération de la corbeille:", error);
@@ -168,7 +183,7 @@ class Media {
   // Récupérer un média par son ID
   static async getById(id) {
     try {
-      return await db.get("SELECT * FROM media WHERE id = ?", [id]);
+      return await db.get("SELECT id, original_name, file_name, file_path, file_type, file_size, hash, dimension, album_id, is_trashed, trashed_at, creation_date, upload_date, updated_at FROM media WHERE id = ?", [id]);
     } catch (error) {
       console.error("Erreur lors de la récupération du média:", error);
       throw error;
@@ -177,7 +192,7 @@ class Media {
 
   static async getByHash(hash) {
     try {
-      return await db.get("SELECT * FROM media WHERE hash = ?", [hash]);
+      return await db.get("SELECT id, original_name, file_name, file_path, file_type, file_size, hash, dimension, album_id, is_trashed, trashed_at, creation_date, upload_date, updated_at FROM media WHERE hash = ?", [hash]);
     } catch (error) {
       console.error("Erreur lors de la récupération du média:", error);
       throw error;
@@ -188,8 +203,8 @@ class Media {
   static async getAll(includeTrashed = false) {
     try {
       const query = includeTrashed
-        ? "SELECT * FROM media ORDER BY creation_date DESC"
-        : "SELECT * FROM media WHERE is_trashed = 0 ORDER BY creation_date DESC";
+        ? "SELECT id, original_name, file_name, file_path, file_type, file_size, hash, dimension, album_id, is_trashed, trashed_at, creation_date, upload_date, updated_at FROM media ORDER BY creation_date DESC"
+        : "SELECT id, original_name, file_name, file_path, file_type, file_size, hash, dimension, album_id, is_trashed, trashed_at, creation_date, upload_date, updated_at FROM media WHERE is_trashed = 0 ORDER BY creation_date DESC";
 
       return await db.all(query);
     } catch (error) {

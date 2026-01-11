@@ -6,7 +6,6 @@
   "author": "Andrea Belvedere",
   "license": "ISC",
   "private": true,
-
   "scripts": {
     "start": "NODE_ENV=production node server.js",
     "dev": "NODE_ENV=development nodemon server.js",
@@ -15,11 +14,12 @@
     "logs": "pm2 logs ndls",
     "init-db": "node -e \"require('./addon/database').initializeDatabase()\""
   },
-
   "dependencies": {
+    "axios": "^1.6.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.19.2",
+    "form-data": "^4.0.0",
     "fs-extra": "^11.1.1",
     "multer": "^1.4.5-lts.1",
     "sharp": "^0.33.3",
@@ -30,20 +30,16 @@
     "check-disk-space": "^3.4.0",
     "exif-parser": "^0.1.12"
   },
-
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-
   "engines": {
     "node": ">=18.0.0"
   },
-  
   "repository": {
     "type": "git",
     "url": "https://github.com/votre-utilisateur/ndls-gallery.git"
   },
-  
   "keywords": [
     "gallery",
     "photo",

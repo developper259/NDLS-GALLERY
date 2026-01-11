@@ -57,7 +57,7 @@ const getFolderSize = async (folderPath) => {
 const getStorageStats = async (req, res) => {
     try {
         // Récupérer les informations du disque
-        const diskInfo = await checkDiskSpace('/');
+        const diskInfo = await checkDiskSpace(config.paths.disk);
         const total = diskInfo.size;
         
         // Utiliser les chemins prédéfinis

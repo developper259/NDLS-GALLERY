@@ -33,7 +33,7 @@ const allowedFileTypes = new RegExp(
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: config.limits.fileSize, // 50MB par défaut
+    fileSize: undefined, // Pas de limite de taille de fichier
     files: config.limits.maxFiles,
   },
   fileFilter: (req, file, cb) => {

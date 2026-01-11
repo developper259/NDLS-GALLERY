@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  ndls-gallery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ndls-gallery
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - /mnt/disk1/ndls/gallery:/app/data
+      - ./config:/app/config
+    networks:
+      - ndls-network
+
+networks:
+  ndls-network:
+    driver: bridge
+
+volumes:
+  ndls-data:
+    driver: local

@@ -17,6 +17,13 @@ const storageController = require("../controllers/storageController");
 router.get("/media", mediaController.getAllMedia);
 
 /**
+ * @route   GET /api/media/:id
+ * @desc    Récupérer un média par son ID
+ * @access  Public
+ */
+router.get("/media/:id", mediaController.getMediaById);
+
+/**
  * @route   GET /api/media/download/:id
  * @desc    Télécharger un média
  * @access  Public

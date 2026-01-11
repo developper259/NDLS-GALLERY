@@ -206,22 +206,29 @@ const getMediaFromAlbum = async (req, res) => {
   try {
     const albumId = req.params.albumId;
     const result = await Album.getMedia(albumId);
-    const promises = result.map(async (item) => ({
+    
+    // Récupérer tous les favoris en une seule requête
+    const favoriteIds = await Album.getAllFavoriteIds();
+    
+    const filteredMedia = result.map((item) => ({
       id: item.id,
       name: item.original_name,
       path: item.file_path,
       thumb: getThumb(item.file_path),
       type: item.file_type.startsWith("video/") ? "video" : "image",
-      favorite: await Album.isFavorite(item.id), // L'await fonctionne ici
+      favorite: favoriteIds.includes(item.id),
       size: item.file_size,
       hash: item.hash,
-      width: item.width,
-      height: item.height,
+      dimension: item.dimension ? {
+        width: parseInt(item.dimension.split('x')[0]),
+        height: parseInt(item.dimension.split('x')[1])
+      } : null,
       duration: item.duration,
+      creation_date: item.creation_date,
+      upload_date: item.upload_date,
+      trashed_at: item.trashed_at,
       createdAt: item.created_at,
     }));
-
-    const filteredMedia = await Promise.all(promises);
 
     res.json({
       success: true,

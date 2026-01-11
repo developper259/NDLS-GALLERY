@@ -20,50 +20,34 @@ const dataPath = path.join(process.cwd(), "data");
 const mediaPath = path.join(dataPath, "media");
 const thumbsPath = path.join(dataPath, "thumbs");
 
-// Fonction pour obtenir les dimensions depuis le fichier
-const getDimension = async (filePath, fileType) => {
-  try {
-    const fullPath = path.join(dataPath, filePath);
-
-    if (fileType.startsWith("video/")) {
-      const dimensions = await getVideoDimensions(fullPath);
-      return { width: dimensions.width, height: dimensions.height };
-    } else {
-      const dimensions = await getImageDimensions(fullPath);
-      return { width: dimensions.width, height: dimensions.height };
-    }
-  } catch (error) {
-    console.error("Erreur lors de la lecture des dimensions:", error);
-    return { width: null, height: null };
-  }
-};
-
 // Récupérer tous les médias
 const getAllMedia = async (req, res) => {
   try {
     const includeTrashed = req.query.includeTrashed === "true";
     const media = await Media.getAll(includeTrashed);
 
-    // 1. On crée un tableau de promesses (remarquez le async devant l'item)
-    const promises = media.map(async (item) => ({
+    // Récupérer tous les favoris en une seule requête
+    const favoriteIds = await Album.getAllFavoriteIds();
+
+    // Transformer les médias sans opérations coûteuses
+    const filteredMedia = media.map((item) => ({
       id: item.id,
       name: item.original_name,
       path: item.file_path,
       thumb: getThumb(item.file_path),
       type: item.file_type.startsWith("video/") ? "video" : "image",
-      favorite: await Album.isFavorite(item.id), // L'await fonctionne ici
+      favorite: favoriteIds.includes(item.id),
       size: item.file_size,
       hash: item.hash,
-      width: item.width,
-      height: item.height,
-      dimension: await getDimension(item.file_path, item.file_type),
+      dimension: item.dimension ? {
+        width: parseInt(item.dimension.split('x')[0]),
+        height: parseInt(item.dimension.split('x')[1])
+      } : null,
       duration: item.duration,
       creation_date: item.creation_date,
       upload_date: item.upload_date,
+      trashed_at: item.trashed_at,
     }));
-
-    // 2. On attend que toutes les promesses du tableau soient terminées
-    const filteredMedia = await Promise.all(promises);
 
     res.json({ success: true, data: filteredMedia });
   } catch (error) {
@@ -93,6 +77,50 @@ const downloadMedia = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Erreur lors du téléchargement du média",
+      error: process.env.NODE_ENV === "development" ? error.message : {},
+    });
+  }
+};
+
+// Récupérer un média par son ID
+const getMediaById = async (req, res) => {
+  try {
+    const media = await Media.getById(req.params.id);
+    if (!media) {
+      return res.status(404).json({
+        success: false,
+        message: "Média non trouvé",
+      });
+    }
+
+    // Récupérer les favoris en une seule requête
+    const favoriteIds = await Album.getAllFavoriteIds();
+
+    const mediaData = {
+      id: media.id,
+      name: media.original_name,
+      path: media.file_path,
+      thumb: getThumb(media.file_path),
+      type: media.file_type.startsWith("video/") ? "video" : "image",
+      favorite: favoriteIds.includes(media.id),
+      size: media.file_size,
+      hash: media.hash,
+      dimension: media.dimension ? {
+        width: parseInt(media.dimension.split('x')[0]),
+        height: parseInt(media.dimension.split('x')[1])
+      } : null,
+      duration: media.duration,
+      creation_date: media.creation_date,
+      upload_date: media.upload_date,
+      trashed_at: media.trashed_at,
+    };
+
+    res.json({ success: true, data: mediaData });
+  } catch (error) {
+    console.error("Erreur lors de la récupération du média:", error);
+    res.status(500).json({
+      success: false,
+      message: "Erreur lors de la récupération du média",
       error: process.env.NODE_ENV === "development" ? error.message : {},
     });
   }
@@ -214,13 +242,12 @@ const uploadMedia = async (req, res) => {
       });
     }
 
-    const results = [];
     // Créer les dossiers s'ils n'existent pas
     await fs.ensureDir(mediaPath);
     await fs.ensureDir(thumbsPath);
 
-    // Traiter chaque fichier téléchargé
-    for (const file of req.files) {
+    // Traiter chaque fichier téléchargé en parallèle
+    const uploadPromises = req.files.map(async (file) => {
       try {
         if (!isImage(file.mimetype) && !isVideo(file.mimetype)) {
           throw new Error("Type de fichier non supporté");
@@ -228,16 +255,16 @@ const uploadMedia = async (req, res) => {
 
         // Générer un nom de fichier unique pour le dossier media
         const filename = generateFileName(file.originalname);
-        const fileHash = await generateHash(file.path);
         const destPath = path.join(mediaPath, filename);
-        const existingMedia = await Media.getByHash(fileHash);
+        
+        // Vérifier les doublons avec une méthode rapide (nom original + taille)
+        const existingMedia = await Media.getByOriginalNameAndSize(file.originalname, file.size);
         if (existingMedia) {
-          res.status(207).json({
+          return {
             success: false,
-            message: "Le fichier existe déjà",
-            results,
-          });
-          return;
+            name: file.originalname,
+            error: "Le fichier existe déjà",
+          };
         }
 
         // Déplacer le fichier du dossier tmp vers le dossier media
@@ -273,9 +300,10 @@ const uploadMedia = async (req, res) => {
           duration = videoInfo.duration || 0;
         }
 
-        // Créer la miniature
         if (!creation_date) {
-          creation_date = new Date();
+          // Utiliser la date de modification du fichier comme fallback
+          const stats = await fs.stat(destPath);
+          creation_date = stats.mtime;
         }
 
         const thumbPath = await createThumbnail(destPath, file.mimetype);
@@ -288,18 +316,16 @@ const uploadMedia = async (req, res) => {
           thumb: thumbPath,
           type: file.mimetype,
           size: file.size,
-          hash: fileHash,
-          width: width,
-          height: height,
+          hash: `${file.originalname}_${file.size}`, // Utiliser nom+taille comme identifiant unique
+          dimension: `${width}x${height}`,
           duration: duration,
           creation_date: creation_date,
+          upload_date: new Date(),
         };
 
-        // Ici, vous pouvez ajouter la logique pour générer une miniature
-        // et mettre à jour mediaData.thumb_path
         const media = await Media.create(mediaData);
 
-        results.push({
+        return {
           success: true,
           id: media.id,
           name: media.originalName,
@@ -308,11 +334,15 @@ const uploadMedia = async (req, res) => {
           type: media.type.startsWith("video/") ? "video" : "image",
           size: media.size,
           hash: media.hash,
-          width: media.width,
-          height: media.height,
+          dimension: media.dimension ? {
+            width: parseInt(media.dimension.split('x')[0]),
+            height: parseInt(media.dimension.split('x')[1])
+          } : null,
           duration: media.duration || 0,
           creation_date: media.creation_date,
-        });
+          upload_date: media.upload_date,
+          trashed_at: media.trashed_at,
+        };
       } catch (error) {
         console.error("Erreur lors du traitement du fichier:", error);
 
@@ -328,23 +358,33 @@ const uploadMedia = async (req, res) => {
           }
         }
 
-        results.push({
+        return {
           success: false,
           name: file.originalname,
           error: error.message,
-        });
+        };
       }
+    });
+
+    // Attendre que tous les uploads soient terminés
+    const uploadResults = await Promise.all(uploadPromises);
+
+    // Vérifier s'il y a des doublons
+    const hasDuplicates = uploadResults.some(result => !result.success && result.error === "Le fichier existe déjà");
+    
+    if (hasDuplicates) {
+      res.status(207).json({
+        success: false,
+        message: "Certains fichiers existent déjà",
+        results: uploadResults,
+      });
+      return;
     }
 
-    // Vérifier si des erreurs se sont produites
-    const hasErrors = results.some((result) => !result.success);
-
-    res.status(hasErrors ? 207 : 201).json({
-      success: !hasErrors,
-      message: hasErrors
-        ? "Certains fichiers n'ont pas pu être téléchargés"
-        : "Tous les fichiers ont été téléchargés avec succès",
-      results,
+    res.json({
+      success: true,
+      message: `${uploadResults.filter(r => r.success).length} fichier(s) téléchargé(s) avec succès`,
+      results: uploadResults,
     });
   } catch (error) {
     console.error("Erreur lors du traitement des fichiers:", error);
@@ -380,10 +420,14 @@ const getTrashedMedia = async (req, res) => {
       type: item.file_type.startsWith("video/") ? "video" : "image",
       size: item.file_size,
       hash: item.hash,
-      width: item.width,
-      height: item.height,
+      dimension: item.dimension ? {
+        width: parseInt(item.dimension.split('x')[0]),
+        height: parseInt(item.dimension.split('x')[1])
+      } : null,
       duration: item.duration,
-      createdAt: item.created_at,
+      creation_date: item.creation_date,
+      upload_date: item.upload_date,
+      trashed_at: item.trashed_at,
     }));
 
     res.json({ success: true, data: filteredMedia });
@@ -399,6 +443,7 @@ const getTrashedMedia = async (req, res) => {
 
 module.exports = {
   getAllMedia,
+  getMediaById,
   downloadMedia,
   uploadMedia,
   moveToTrash,

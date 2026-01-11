@@ -86,13 +86,12 @@ class Database {
                     file_type TEXT NOT NULL,
                     file_size INTEGER NOT NULL,
                     hash TEXT NOT NULL,
-                    width INTEGER,
-                    height INTEGER,
+                    dimension TEXT,
                     album_id INTEGER,
                     is_trashed BOOLEAN DEFAULT 0,
                     trashed_at DATETIME,
                     creation_date DATETIME,
-                    upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    upload_date DATETIME,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (album_id) REFERENCES albums(id) ON DELETE SET NULL
                 )

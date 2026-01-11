@@ -167,6 +167,19 @@ class Album {
     return false;
   }
 
+  // Récupérer tous les IDs des médias favoris en une seule requête
+  static async getAllFavoriteIds() {
+    try {
+      const favorites = await db.all(
+        `SELECT media_id FROM album_media WHERE album_id = 1`
+      );
+      return favorites.map(f => f.media_id);
+    } catch (error) {
+      console.error("Erreur lors de la récupération des IDs favoris:", error);
+      return [];
+    }
+  }
+
   // Marquer un album comme favori
   static async markAsFavorite(albumId, isFavorite = true) {
     try {
