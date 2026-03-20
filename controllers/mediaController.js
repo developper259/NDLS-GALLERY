@@ -20,14 +20,15 @@ const dataPath = path.join(process.cwd(), "data");
 const mediaPath = path.join(dataPath, "media");
 const thumbsPath = path.join(dataPath, "thumbs");
 
-// Récupérer tous les médias
+// Récupérer tous les médias de l'utilisateur connecté
 const getAllMedia = async (req, res) => {
   try {
+    const userId = req.user.id;
     const includeTrashed = req.query.includeTrashed === "true";
-    const media = await Media.getAll(includeTrashed);
+    const media = await Media.getAllByUser(userId, includeTrashed);
 
-    // Récupérer tous les favoris en une seule requête
-    const favoriteIds = await Album.getAllFavoriteIds();
+    // Récupérer tous les favoris de l'utilisateur en une seule requête
+    const favoriteIds = await Album.getAllFavoriteIdsByUser(userId);
 
     // Transformer les médias sans opérations coûteuses
     const filteredMedia = media.map((item) => ({
@@ -242,6 +243,34 @@ const uploadMedia = async (req, res) => {
       });
     }
 
+    // Vérifier la limite de stockage de l'utilisateur
+    const db = require("../addon/database");
+    const user = await db.get('SELECT storage_limit FROM users WHERE id = ?', [req.user.id]);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Utilisateur non trouvé",
+      });
+    }
+
+    // Calculer l'espace utilisé actuel
+    const currentUsage = await db.get(
+      'SELECT COALESCE(SUM(file_size), 0) as total_size FROM media WHERE user_id = ? AND is_trashed = 0',
+      [req.user.id]
+    );
+
+    // Calculer la taille totale des fichiers à uploader
+    const totalUploadSize = req.files.reduce((total, file) => total + file.size, 0);
+    
+    // Vérifier si l'upload dépasse la limite
+    if (currentUsage.total_size + totalUploadSize > user.storage_limit) {
+      return res.status(413).json({
+        success: false,
+        message: `Espace insuffisant. Limite: ${Math.round(user.storage_limit / 1024 / 1024)}MB, Utilisé: ${Math.round(currentUsage.total_size / 1024 / 1024)}MB, Demandé: ${Math.round(totalUploadSize / 1024 / 1024)}MB`,
+      });
+    }
+
     // Créer les dossiers s'ils n'existent pas
     await fs.ensureDir(mediaPath);
     await fs.ensureDir(thumbsPath);
@@ -309,7 +338,7 @@ const uploadMedia = async (req, res) => {
         const thumbPath = await createThumbnail(destPath, file.mimetype);
 
         // Créer une entrée média dans la base de données
-        const mediaData = {
+        const mediaRecord = await Media.create({
           originalName: file.originalname,
           fileName: filename,
           path: `/media/${filename}`,
@@ -321,27 +350,25 @@ const uploadMedia = async (req, res) => {
           duration: duration,
           creation_date: creation_date,
           upload_date: new Date(),
-        };
-
-        const media = await Media.create(mediaData);
+        }, null, req.user.id);
 
         return {
           success: true,
-          id: media.id,
-          name: media.originalName,
-          path: media.path,
-          thumb: media.thumb,
-          type: media.type.startsWith("video/") ? "video" : "image",
-          size: media.size,
-          hash: media.hash,
-          dimension: media.dimension ? {
-            width: parseInt(media.dimension.split('x')[0]),
-            height: parseInt(media.dimension.split('x')[1])
+          id: mediaRecord.id,
+          name: mediaRecord.originalName,
+          path: mediaRecord.path,
+          thumb: mediaRecord.thumb,
+          type: mediaRecord.type.startsWith("video/") ? "video" : "image",
+          size: mediaRecord.size,
+          hash: mediaRecord.hash,
+          dimension: mediaRecord.dimension ? {
+            width: parseInt(mediaRecord.dimension.split('x')[0]),
+            height: parseInt(mediaRecord.dimension.split('x')[1])
           } : null,
-          duration: media.duration || 0,
-          creation_date: media.creation_date,
-          upload_date: media.upload_date,
-          trashed_at: media.trashed_at,
+          duration: mediaRecord.duration || 0,
+          creation_date: mediaRecord.creation_date,
+          upload_date: mediaRecord.upload_date,
+          trashed_at: mediaRecord.trashed_at,
         };
       } catch (error) {
         console.error("Erreur lors du traitement du fichier:", error);

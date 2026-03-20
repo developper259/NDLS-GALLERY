@@ -6,29 +6,36 @@ const config = require("../config/config.json");
 class Album {
   static favoriteAlbumId = config.album.favoriteIndex || 1;
 
-  // Créer l'album favoris s'il n'existe pas
-  static async createFavoriteAlbum() {
+  // Vérifier l'espace de stockage disponible pour un utilisateur
+  static async checkStorageSpace(userId, requiredSpace) {
     try {
-      const existing = await Album.getById(Album.favoriteAlbumId);
-      if (!existing) {
-        await Album.create({
-          name: "Favoris",
-          id: Album.favoriteAlbumId,
-          description: "Album des images favorites",
-          isFavorite: true,
-        });
+      const user = await db.get(
+        'SELECT storage_limit FROM users WHERE id = ?',
+        [userId]
+      );
+
+      if (!user) {
+        throw new Error('Utilisateur non trouvé');
       }
+
+      const currentUsage = await db.get(
+        'SELECT COALESCE(SUM(file_size), 0) as total_size FROM media WHERE user_id = ? AND is_trashed = 0',
+        [userId]
+      );
+
+      return (currentUsage.total_size + requiredSpace) <= user.storage_limit;
     } catch (error) {
-      console.error("Erreur lors de la création de l'album favoris:", error);
+      console.error("Erreur lors de la vérification de l'espace de stockage:", error);
+      throw error;
     }
   }
 
   // Créer un nouvel album
-  static async create({ name, description = "", isFavorite = false, id = null }) {
+  static async create({ name, description = "", isFavorite = false, id = null, userId }) {
     try {
       const result = await db.run(
-        "INSERT INTO albums (id, name, description, is_favorite) VALUES (?, ?, ?, ?)",
-        [id ? id : null, name, description, isFavorite ? 1 : 0]
+        "INSERT INTO albums (id, user_id, name, description, is_favorite) VALUES (?, ?, ?, ?, ?)",
+        [id ? id : null, userId, name, description, isFavorite ? 1 : 0]
       );
       return { id: result.id, name, description, isFavorite };
     } catch (error) {
@@ -37,12 +44,22 @@ class Album {
     }
   }
 
-  // Récupérer tous les albums
-  static async getAll() {
+  // Récupérer tous les albums d'un utilisateur
+  static async getAllByUser(userId) {
     try {
-      return await db.all("SELECT * FROM albums ORDER BY created_at DESC");
+      return await db.all("SELECT * FROM albums WHERE user_id = ? ORDER BY created_at DESC", [userId]);
     } catch (error) {
-      console.error("Erreur lors de la récupération des albums:", error);
+      console.error("Erreur lors de la récupération des albums de l'utilisateur:", error);
+      throw error;
+    }
+  }
+
+  // Récupérer un album par son ID et utilisateur
+  static async getByUserAndId(id, userId) {
+    try {
+      return await db.get("SELECT * FROM albums WHERE id = ? AND user_id = ?", [id, userId]);
+    } catch (error) {
+      console.error("Erreur lors de la récupération de l'album:", error);
       throw error;
     }
   }
@@ -83,20 +100,20 @@ class Album {
   }
 
   // Ajouter un média à un album
-  static async addMedia(albumId, mediaId, position = null) {
+  static async addMedia(albumId, mediaId, userId, position = null) {
     try {
       if (position === null) {
         // Si aucune position n'est spécifiée, on ajoute à la fin
         const lastPosition = await db.get(
-          "SELECT MAX(position) as max_position FROM album_media WHERE album_id = ?",
-          [albumId]
+          "SELECT MAX(position) as max_position FROM album_media WHERE album_id = ? AND user_id = ?",
+          [albumId, userId]
         );
         position = (lastPosition?.max_position || 0) + 1;
       }
 
       await db.run(
-        "INSERT OR REPLACE INTO album_media (album_id, media_id, position) VALUES (?, ?, ?)",
-        [albumId, mediaId, position]
+        "INSERT OR REPLACE INTO album_media (album_id, media_id, user_id, position) VALUES (?, ?, ?, ?)",
+        [albumId, mediaId, userId, position]
       );
       return true;
     } catch (error) {
@@ -176,6 +193,19 @@ class Album {
       return favorites.map(f => f.media_id);
     } catch (error) {
       console.error("Erreur lors de la récupération des IDs favoris:", error);
+      return [];
+    }
+  }
+
+  // Récupérer tous les IDs des médias favoris d'un utilisateur en une seule requête
+  static async getAllFavoriteIdsByUser(userId) {
+    try {
+      const favorites = await db.all(
+        `SELECT media_id FROM album_media WHERE album_id = 1 AND user_id = ?`
+      );
+      return favorites.map(f => f.media_id);
+    } catch (error) {
+      console.error("Erreur lors de la récupération des IDs favoris de l'utilisateur:", error);
       return [];
     }
   }

@@ -11,7 +11,8 @@ const getDefaultThumbnail = () => {
 const createAlbum = async (req, res) => {
   try {
     const { name, description } = req.body;
-    const album = await Album.create({ name, description });
+    const userId = req.user.id;
+    const album = await Album.create({ name, description, userId });
 
     res.status(201).json({
       success: true,
@@ -27,10 +28,11 @@ const createAlbum = async (req, res) => {
   }
 };
 
-// Récupérer tous les albums
+// Récupérer tous les albums de l'utilisateur connecté
 const getAllAlbums = async (req, res) => {
   try {
-    const albums = await Album.getAll();
+    const userId = req.user.id;
+    const albums = await Album.getAllByUser(userId);
 
     // Ajouter le thumbnail et le nombre de médias à chaque album
     const albumsWithThumbnails = await Promise.all(

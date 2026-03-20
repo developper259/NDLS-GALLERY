@@ -6,14 +6,15 @@ const { getThumb } = require("../utils/fileUtils");
 
 class Media {
   // Ajouter un nouveau média
-  static async create(file, albumId = null) {
+  static async create(file, albumId = null, userId) {
     try {
       // Insérer les informations dans la base de données
       const result = await db.run(
         `INSERT INTO media 
-                (original_name, file_name, file_path, file_type, file_size, hash, album_id, creation_date, upload_date, dimension)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                (user_id, original_name, file_name, file_path, file_type, file_size, hash, album_id, creation_date, upload_date, dimension)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
+          userId,
           file.originalName,
           file.fileName,
           file.path,
@@ -29,7 +30,7 @@ class Media {
 
       // Si un album est spécifié, lier le média à l'album
       if (albumId) {
-        await Album.addMedia(albumId, result.id);
+        await Album.addMedia(albumId, result.id, userId);
       }
 
       return { id: result.id, ...file };
@@ -209,6 +210,20 @@ class Media {
       return await db.all(query);
     } catch (error) {
       console.error("Erreur lors de la récupération des médias:", error);
+      throw error;
+    }
+  }
+
+  // Récupérer tous les médias d'un utilisateur (hors corbeille par défaut)
+  static async getAllByUser(userId, includeTrashed = false) {
+    try {
+      const query = includeTrashed
+        ? "SELECT id, original_name, file_name, file_path, file_type, file_size, hash, dimension, album_id, is_trashed, trashed_at, creation_date, upload_date, updated_at FROM media WHERE user_id = ? ORDER BY creation_date DESC"
+        : "SELECT id, original_name, file_name, file_path, file_type, file_size, hash, dimension, album_id, is_trashed, trashed_at, creation_date, upload_date, updated_at FROM media WHERE user_id = ? AND is_trashed = 0 ORDER BY creation_date DESC";
+
+      return await db.all(query, [userId]);
+    } catch (error) {
+      console.error("Erreur lors de la récupération des médias de l'utilisateur:", error);
       throw error;
     }
   }

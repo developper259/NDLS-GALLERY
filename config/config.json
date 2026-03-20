@@ -1,9 +1,9 @@
 {
   "server": {
-    "port": 3000,
+    "port": 3030,
     "cors": true,
     "environment": "development",
-    "root": "http://localhost:3000",
+    "root": "http://localhost:3030",
     "apiPrefix": "/api"
   },
   "database": {
@@ -21,6 +21,7 @@
   "limits": {
     "fileSize": null,
     "maxFiles": 10,
+    "defaultStorageLimit": 53687091200,
     "allowedFileTypes": [
       "jpg",
       "jpeg",

@@ -8,7 +8,7 @@ const db = require("./addon/database");
 
 // Création de l'application Express
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3030;
 
 // Middleware
 app.use(cors());
@@ -26,6 +26,11 @@ app.use("/thumbs", express.static(config.paths.thumbs));
 // Routes API
 const apiRoutes = require("./routes/api");
 app.use("/api", apiRoutes);
+
+// Route de callback OAuth2 - Rediriger vers callback.php
+app.get("/callback", (req, res) => {
+  res.redirect("/callback.php");
+});
 
 // Routes API
 app.use("/health", (req, res) => {
@@ -50,8 +55,8 @@ const startServer = async () => {
     await fs.ensureDir(config.paths.thumbs);
     await fs.ensureDir(config.paths.tmp);
 
-    const album = require("./addon/album");
-    await album.createFavoriteAlbum();
+    // La base de données et les tables sont créées automatiquement lors de l'initialisation
+    // Plus besoin de créer l'album favoris au démarrage car il nécessite un utilisateur connecté
 
     // Démarrer le serveur
     app.listen(PORT, '0.0.0.0', () => {

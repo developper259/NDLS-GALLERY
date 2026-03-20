@@ -55,7 +55,9 @@ class Database {
       this.db.run("PRAGMA busy_timeout = 30000;");
 
       // Créer les tables si elles n'existent pas
-      this.createTables().catch((err) => {
+      this.createTables().then(() => {
+        console.log("Base de données initialisée avec succès");
+      }).catch((err) => {
         console.error("Erreur lors de la création des tables:", err);
       });
     });
@@ -63,23 +65,52 @@ class Database {
 
   async createTables() {
     try {
-      // Création de la table albums
+      // Création de la table users (simplifiée)
       await this.run(`
-                CREATE TABLE IF NOT EXISTS albums (
+                CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    description TEXT,
-                    cover_image TEXT,
-                    is_favorite BOOLEAN DEFAULT 0,
+                    id_ndl TEXT NOT NULL UNIQUE,
+                    storage_limit INTEGER DEFAULT ${this.config.limits.defaultStorageLimit},
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             `);
 
-      // Création de la table media
+      // Création de la table tokens (pour éviter les appels répétés à NDLS)
+      await this.run(`
+                CREATE TABLE IF NOT EXISTS tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    access_token TEXT NOT NULL,
+                    refresh_token TEXT NOT NULL,
+                    token_ndl TEXT NOT NULL,
+                    expires_at INTEGER NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+            `);
+
+      // Création de la table albums (avec user_id)
+      await this.run(`
+                CREATE TABLE IF NOT EXISTS albums (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    cover_image TEXT,
+                    is_favorite BOOLEAN DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+            `);
+
+      // Création de la table media (avec user_id)
       await this.run(`
                 CREATE TABLE IF NOT EXISTS media (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
                     original_name TEXT NOT NULL,
                     file_name TEXT NOT NULL,
                     file_path TEXT NOT NULL,
@@ -93,20 +124,23 @@ class Database {
                     creation_date DATETIME,
                     upload_date DATETIME,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                     FOREIGN KEY (album_id) REFERENCES albums(id) ON DELETE SET NULL
                 )
             `);
 
-      // Création de la table de liaison album_media
+      // Création de la table de liaison album_media (avec user_id)
       await this.run(`
                 CREATE TABLE IF NOT EXISTS album_media (
                     album_id INTEGER,
                     media_id INTEGER,
+                    user_id INTEGER NOT NULL,
                     position INTEGER,
                     added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (album_id, media_id),
                     FOREIGN KEY (album_id) REFERENCES albums(id) ON DELETE CASCADE,
-                    FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE CASCADE
+                    FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE CASCADE,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 )
             `);
 

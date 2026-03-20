@@ -2,6 +2,7 @@ const checkDiskSpace = require('check-disk-space').default;
 const fs = require('fs-extra');
 const path = require('path');
 const config = require('../config/config.json');
+const db = require('../addon/database');
 
 // Construire les chemins complets
 const dataPath = path.join(process.cwd(), 'data');
@@ -56,6 +57,8 @@ const getFolderSize = async (folderPath) => {
 // Obtenir les statistiques de stockage
 const getStorageStats = async (req, res) => {
     try {
+        const userId = req.user?.id;
+
         // Récupérer les informations du disque
         const diskInfo = await checkDiskSpace(config.paths.disk);
         const total = diskInfo.size;
@@ -80,25 +83,55 @@ const getStorageStats = async (req, res) => {
         // Calculer les pourcentages
         const usedPercentage = ((used / total) * 100).toFixed(2);
         const freePercentage = ((free / total) * 100).toFixed(2);
+
+        // Récupérer les informations de stockage utilisateur si connecté
+        let userStorage = null;
+        if (userId) {
+            const user = await db.get(
+                'SELECT storage_limit FROM users WHERE id = ?',
+                [userId]
+            );
+
+            if (user) {
+                const userUsage = await db.get(
+                    'SELECT COALESCE(SUM(file_size), 0) as used_space FROM media WHERE user_id = ? AND is_trashed = 0',
+                    [userId]
+                );
+
+                const userTrashed = await db.get(
+                    'SELECT COALESCE(SUM(file_size), 0) as trashed_space FROM media WHERE user_id = ? AND is_trashed = 1',
+                    [userId]
+                );
+
+                userStorage = {
+                    limit: user.storage_limit,
+                    used: userUsage.used_space || 0,
+                    trashed: userTrashed.trashed_space || 0,
+                    available: user.storage_limit - (userUsage.used_space || 0),
+                    usage_percentage: Math.round(((userUsage.used_space || 0) / user.storage_limit) * 100)
+                };
+            }
+        }
         
         // Formater les données de réponse
         const response = {
             success: true,
+            user_storage: userStorage,
             disk: {
                 total: {
-                    bytes: total,
-                    formatted: formatBytes(total),
-                    unit: getRecommendedUnit(total).unit
+                    bytes: userStorage ? userStorage.limit : total,
+                    formatted: userStorage ? formatBytes(userStorage.limit) : formatBytes(total),
+                    unit: userStorage ? getRecommendedUnit(userStorage.limit).unit : getRecommendedUnit(total).unit
                 },
                 used: {
-                    bytes: used,
-                    formatted: formatBytes(used),
-                    percentage: parseFloat(usedPercentage)
+                    bytes: userStorage ? userStorage.used : used,
+                    formatted: userStorage ? formatBytes(userStorage.used) : formatBytes(used),
+                    percentage: userStorage ? userStorage.usage_percentage : parseFloat(usedPercentage)
                 },
                 free: {
-                    bytes: free,
-                    formatted: formatBytes(free),
-                    percentage: parseFloat(freePercentage)
+                    bytes: userStorage ? userStorage.available : free,
+                    formatted: userStorage ? formatBytes(userStorage.available) : formatBytes(free),
+                    percentage: userStorage ? (100 - userStorage.usage_percentage) : parseFloat(freePercentage)
                 }
             },
             usage: {
